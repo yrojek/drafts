@@ -43,6 +43,9 @@ class GraphNode(object):
         # The only method that needs to be overwritten
         pass
 
+    def add_publishers_to_watch(self, *publishers):
+        self._publishers = self._publishers + [p.__subscribe(self) for p in publishers]
+
     def __subscribe(self, subscriber):
         self._subscribers.append(subscriber)
         return self
@@ -68,39 +71,110 @@ class GraphNode(object):
 
 
 if __name__ == '__main__':
-    class A1(GraphNode):
 
-        def __init__(self, i1, i2):
-            super().__init__(i1, i2)
-            self._i1 = i1
-            self._i2 = i2
+    # a graph consists of 5 nodes
+    # DateNode(INPUT) NameNode (INPUT)
+    #       |          /     |
+    #       |         /      |
+    #       |        /       |
+    #       |       /        |
+    #     OccupancyNode    PersonalDataNode
+    #          \            /
+    #           \          /
+    #            \        /
+    #            ReportNode (OUTPUT)
 
-            self._data = None
+    class DateNode(GraphNode):
+        def __init__(self):
+            super().__init__()
+            self._moved_in_date = None
+
+        @graph_input
+        def move_in(self, current_date):
+            print('DateNode move_in()')
+            self._moved_in_date = current_date
+
+        def get_moved_in_date(self):
+            print('DateNode get_moved_in_date()')
+            return self._moved_in_date
+
+    class NameNode(GraphNode):
+        def __init__(self):
+            super().__init__()
+            self._occupant_name = None
+
+        @graph_input
+        def move_in(self, name):
+            print('NameNode move_in()')
+            self._occupant_name = name
+
+        def get_occupant_name(self):
+            print('NameNode get_occupant_name()')
+            return self._occupant_name
+
+    class OccupancyNode(GraphNode):
+        def __init__(self, date_node, name_node):
+            super().__init__(date_node, name_node)
+            self._date_node = date_node
+            self._name_node = name_node
 
         def update(self):
-            self._data = self._i1.get_value() + self._i2.get_value()
+            print('OccupancyNode update()')
+
+        def get_data(self):
+            print('OccupancyNode get_data()')
+            return "{} moved in on {}".format(self._name_node.get_occupant_name(), self._date_node.get_moved_in_date())
+
+    class PersonalDataNode(GraphNode):
+        def __init__(self, name_node):
+            super().__init__(name_node)
+            self._name_node = name_node
+            self._personal_data = None
+
+        def update(self):
+            print('PersonalDataNode update()')
+            person_name = self._name_node.get_occupant_name()
+            # get personal data from a database
+            person_telephone = "+1-111-555-1111"
+            person_address = "123, High street, London, UK, RG1 3DW"
+            self._personal_data = (person_name, person_telephone, person_address)
+
+        def get_data(self):
+            print('PersonalDataNode get_data()')
+            return "Name: {}, Address: {}, Telephone: {}".format(*self._personal_data)
+
+    class ReportNode(GraphNode):
+        def __init__(self, occupancy_node, personal_data_node):
+            super().__init__(occupancy_node, personal_data_node)
+            self._occupancy_node = occupancy_node
+            self._personal_data_node = personal_data_node
+            self._report = None
+
+        def update(self):
+            print('ReportNode update()')
+            self._report = self._personal_data_node.get_data() + '. ' + self._occupancy_node.get_data()
 
         @graph_output
-        def get_value(self):
-            return self._data
+        def get_data(self):
+            print('ReportNode get_data()')
+            return self._report
 
-    class I1(GraphNode):
-        @graph_input
-        def check_new_input(self, v):
-            self._v = v
-            return False
+    class HotelBuilder:
+        def __init__(self):
+            self._date = DateNode()
+            self._name = NameNode()
+            self._occupancy = OccupancyNode(self._date, self._name)
+            self._personal = PersonalDataNode(self._name)
+            self._report = ReportNode(self._occupancy, self._personal)
 
-        @graph_output
-        def get_value(self):
-            return self._v
+        def date_node(self): return self._date
+        def name_node(self): return self._name
+        def report_node(self): return self._report
 
-    i1 = I1()
-    i2 = I1()
-    a1 = A1(i1, i2)
-    i1.check_new_input(3.)
-    i2.check_new_input(5.3)
 
-    print(a1.get_value())
+    hotel_builder = HotelBuilder()
 
-    i1.check_new_input(5)
-    print(a1.get_value())
+    print('Have built a hotel')
+    hotel_builder.name_node().move_in('John Doe')
+    hotel_builder.date_node().move_in('2025-01-01')
+    print(hotel_builder.report_node().get_data())
